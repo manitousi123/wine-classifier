@@ -9,7 +9,8 @@ from sklearn.preprocessing import StandardScaler
 
 RANDOM_STATE = 42
 TEST_SIZE = 0.30
-N_NEIGHBORS = 5
+FIXED_N_NEIGHBORS = 5
+CANDIDATE_NEIGHBORS = (1, 3, 5, 7, 9, 11)
 CV_FOLDS = 5
 
 def load_dataset():
@@ -35,16 +36,21 @@ def split_dataset(X, y):
         stratify=y,
     )
 
-def evaluate_baseline_and_pipeline(X_train, X_test, y_train, y_test):
-    baseline_model = KNeighborsClassifier(n_neighbors=N_NEIGHBORS)
+
+def build_scaled_model(n_neighbors):
+    return make_pipeline(
+        StandardScaler(),
+        KNeighborsClassifier(n_neighbors=n_neighbors),
+    )
+
+
+def compare_fixed_models(X_train, X_test, y_train, y_test):
+    baseline_model = KNeighborsClassifier(n_neighbors=FIXED_N_NEIGHBORS)
     baseline_model.fit(X_train, y_train)
     baseline_predictions = baseline_model.predict(X_test)
     baseline_accuracy = accuracy_score(y_test, baseline_predictions)
 
-    scaled_model = make_pipeline(
-        StandardScaler(),
-        KNeighborsClassifier(n_neighbors=N_NEIGHBORS),
-    )
+    scaled_model = build_scaled_model(FIXED_N_NEIGHBORS)
     scaled_model.fit(X_train, y_train)
     scaled_predictions = scaled_model.predict(X_test)
     scaled_accuracy = accuracy_score(y_test, scaled_predictions)
@@ -56,24 +62,47 @@ def evaluate_baseline_and_pipeline(X_train, X_test, y_train, y_test):
         f"{scaled_accuracy - baseline_accuracy:+.3f}"
     )
 
-    return scaled_model, scaled_predictions
 
-def report_model(scaled_model, X_train, y_train, y_test, predictions, target_names):
-    cv_scores = cross_val_score(
-        scaled_model,
-        X_train,
-        y_train,
-        cv=CV_FOLDS,
-    )
-    mean_cv_accuracy = sum(cv_scores) / len(cv_scores)
+def tune_neighbor_count(X_train, y_train):
+    mean_scores = {}
 
-    print(f"\n{CV_FOLDS}-fold cross-validation scores: {cv_scores}")
-    print(f"Mean cross-validation accuracy: {mean_cv_accuracy:.3f}")
-    print("\nClassification report:")
+    print("\nTraining-only neighbor search:")
+    for n_neighbors in CANDIDATE_NEIGHBORS:
+        candidate_model = build_scaled_model(n_neighbors)
+        scores = cross_val_score(
+            candidate_model,
+            X_train,
+            y_train,
+            cv=CV_FOLDS,
+        )
+        mean_score = sum(scores) / len(scores)
+        mean_scores[n_neighbors] = mean_score
+        print(f"n_neighbors={n_neighbors}: mean CV accuracy={mean_score:.3f}")
+
+    best_n_neighbors = max(mean_scores, key=mean_scores.get)
+    print(f"Selected n_neighbors: {best_n_neighbors}")
+    return best_n_neighbors
+
+
+def evaluate_tuned_model(
+    best_n_neighbors,
+    X_train,
+    X_test,
+    y_train,
+    y_test,
+    target_names,
+):
+    tuned_model = build_scaled_model(best_n_neighbors)
+    tuned_model.fit(X_train, y_train)
+    tuned_predictions = tuned_model.predict(X_test)
+    tuned_accuracy = accuracy_score(y_test, tuned_predictions)
+
+    print(f"Tuned holdout accuracy: {tuned_accuracy:.3f}")
+    print("\nTuned classification report:")
     print(
         classification_report(
             y_test,
-            predictions,
+            tuned_predictions,
             target_names=target_names,
             zero_division=0,
         )
@@ -81,30 +110,25 @@ def report_model(scaled_model, X_train, y_train, y_test, predictions, target_nam
 
     ConfusionMatrixDisplay.from_predictions(
         y_test,
-        predictions,
+        tuned_predictions,
         display_labels=target_names,
     )
-    plt.show()  
+    plt.show() 
 
 
 def main():
     wine, X, y = load_dataset()
     X_train, X_test, y_train, y_test = split_dataset(X, y)
-    scaled_model, scaled_predictions = evaluate_baseline_and_pipeline(
+    compare_fixed_models(X_train, X_test, y_train, y_test)
+    best_n_neighbors = tune_neighbor_count(X_train, y_train)
+    evaluate_tuned_model(
+        best_n_neighbors,
         X_train,
         X_test,
         y_train,
         y_test,
-    )
-    report_model(
-        scaled_model,
-        X_train,
-        y_train,
-        y_test,
-        scaled_predictions,
         wine.target_names,
-    )
-    
+    )  
     
 if __name__ == "__main__":
     main()

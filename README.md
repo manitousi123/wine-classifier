@@ -40,6 +40,11 @@ The script prints the observed metrics and opens a confusion matrix. The scores 
 
 KNN uses distances between samples. When feature ranges differ substantially, large-magnitude features can dominate those distances. `StandardScaler` puts features on comparable scales, while the pipeline keeps scaling attached to each model fit instead of preprocessing the entire dataset in advance.
 
+## Tuning without test-set leakage
+
+The neighbor count is selected from a small candidate list by five-fold cross-validation using only the training split. The test set is not used to select `n_neighbors`; it is evaluated once after the selection is complete.
+
+
 ## Interview talking points
 
 - Why a baseline should come before optimization
@@ -47,7 +52,3 @@ KNN uses distances between samples. When feature ranges differ substantially, la
 - Why preprocessing belongs inside a pipeline
 - What accuracy hides and what the classification report reveals
 - Why cross-validation is more persuasive than one split alone
-
-## Next experiment
-
-Tune the neighbor count with cross-validation on the training split, then evaluate the selected pipeline once on the untouched test set.
